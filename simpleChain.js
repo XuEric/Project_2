@@ -62,10 +62,7 @@ class Blockchain {
             newBlock.time = new Date().getTime().toString().slice(0, -3);
             // previous block hash
             if (i > 0) { // has previous block
-                db.get(i - 1, function (err, value) {
-                    if (err) {
-                        return console.log('previous block Not found!', err);
-                    }
+                self.getBlock(i - 1).then(value => {
                     newBlock.previousBlockHash = JSON.parse(value).hash;
 
                     // Block hash with SHA256 using newBlock and converting to a string
@@ -76,6 +73,8 @@ class Blockchain {
                         if (err) return console.log('Block ' + i + ' submission failed', err);
                         console.log("key:" + i + ",value:" + JSON.stringify(newBlock) + " added");
                     });
+                }).catch(err => {
+                    return console.log('previous block Not found!', err);
                 });
             } else { // genesis block
                 newBlock.previousBlockHash = "";
@@ -88,6 +87,52 @@ class Blockchain {
                     console.log("key:" + i + ",value:" + JSON.stringify(newBlock) + " added");
                 });
             }
+        });
+    }
+
+    async getBlockHeight() {
+        try {
+            return await this.getLevelDBCount();
+        } catch (err) {
+            console.log(err);
+            throw err;
+        }
+    }
+
+    getLevelDBCount(key) {
+        let i = 0;
+
+        return new Promise((resolve, reject) => {
+            this.chain.createReadStream().on('data', function (data) {
+                i++;
+            }).on('error', function (err) {
+                reject(err);
+            }).on('close', function () {
+                resolve(i);
+            });
+        });
+    }
+
+    async getBlock(blockHeight) {
+        var block;
+        try {
+            return await this.getLevelDBData(blockHeight);
+        } catch (err) {
+            console.log(err);
+            throw err;
+        }
+    }
+
+    getLevelDBData(key) {
+        return new Promise((resolve, reject) => {
+            db.get(key, function (err, value) {
+                if (err) {
+                    console.log("Not found!", err);
+                    reject(err);
+                } else {
+                    resolve(value);
+                }
+            });
         });
     }
 
@@ -158,9 +203,15 @@ class Blockchain {
 
 let bc = new Blockchain();
 
+bc.getBlock(3).then(value => {
+    console.log(value);
+});
 
+bc.getBlockHeight().then(value => {
+    console.log("height:" + value);
+});
 // testBuildBlock();
-testValidation();
+// testValidation();
 
 function testBuildBlock() {
     (function theLoop(i) {
@@ -172,7 +223,6 @@ function testBuildBlock() {
         }, 500);
     })(10);
 }
-
 
 function testValidation() {
     let inducedErrorBlocks = [2, 4, 7];
