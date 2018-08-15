@@ -44,49 +44,66 @@ class Blockchain {
 
     }
 
-    // Add new block
-    addBlock(newBlock) {
 
+    async addBlock(newBlock) {
+        try {
+            return await this.addBlock0(newBlock);
+        } catch (err) {
+            console.log(err);
+            throw err;
+        }
+    }
+
+    // Add new block
+    addBlock0(newBlock) {
         let i = 0;
         let self = this;
-        this.chain.createReadStream().on('data', function (data) {
-            i++;
-            // console.log("index:" + i + ",data:" + data);
-        }).on('error', function (err) {
-            console.log('Unable to read data stream!', err)
-            process.exit(-1);
-        }).on('close', function () { // find the last block
-            // Block height
-            newBlock.height = i;
-            // UTC timestamp
-            newBlock.time = new Date().getTime().toString().slice(0, -3);
-            // previous block hash
-            if (i > 0) { // has previous block
-                self.getBlock(i - 1).then(value => {
-                    newBlock.previousBlockHash = JSON.parse(value).hash;
+        return new Promise((resolve, reject) => {
+            this.chain.createReadStream().on('data', function (data) {
+                i++;
+            }).on('error', function (err) {
+                console.log('Unable to read data stream!', err);
+                reject(err);
+            }).on('close', function () { // find the last block
+                newBlock.height = i;            // Block height
+                newBlock.time = new Date().getTime().toString().slice(0, -3);            // UTC timestamp
+                // previous block hash
+                if (i > 0) { // has previous block
+                    self.getBlock(i - 1).then(value => {
+                        newBlock.previousBlockHash = JSON.parse(value).hash;
+
+                        // Block hash with SHA256 using newBlock and converting to a string
+                        newBlock.hash = SHA256(JSON.stringify(newBlock)).toString();
+
+                        // Adding block object to chain
+                        self.chain.put(i, JSON.stringify(newBlock), function (err) {
+                            if (err) {
+                                console.log('Block ' + i + ' submission failed', err);
+                                reject(err);
+
+                            }
+                            console.log("key:" + i + ",value:" + JSON.stringify(newBlock) + " added");
+                        });
+                    }).catch(err => {
+                        console.log('previous block Not found!', err);
+                        reject(err);
+                    });
+                } else { // genesis block
+                    newBlock.previousBlockHash = "";
 
                     // Block hash with SHA256 using newBlock and converting to a string
                     newBlock.hash = SHA256(JSON.stringify(newBlock)).toString();
-
                     // Adding block object to chain
                     self.chain.put(i, JSON.stringify(newBlock), function (err) {
-                        if (err) return console.log('Block ' + i + ' submission failed', err);
+                        if (err) {
+                            console.log('Block ' + i + ' submission failed', err);
+                            reject(err);
+                        }
                         console.log("key:" + i + ",value:" + JSON.stringify(newBlock) + " added");
                     });
-                }).catch(err => {
-                    return console.log('previous block Not found!', err);
-                });
-            } else { // genesis block
-                newBlock.previousBlockHash = "";
-
-                // Block hash with SHA256 using newBlock and converting to a string
-                newBlock.hash = SHA256(JSON.stringify(newBlock)).toString();
-                // Adding block object to chain
-                self.chain.put(i, JSON.stringify(newBlock), function (err) {
-                    if (err) return console.log('Block ' + i + ' submission failed', err);
-                    console.log("key:" + i + ",value:" + JSON.stringify(newBlock) + " added");
-                });
-            }
+                }
+                resolve(i);
+            });
         });
     }
 
@@ -99,7 +116,7 @@ class Blockchain {
         }
     }
 
-    getLevelDBCount(key) {
+    getLevelDBCount() {
         let i = 0;
 
         return new Promise((resolve, reject) => {
@@ -114,7 +131,6 @@ class Blockchain {
     }
 
     async getBlock(blockHeight) {
-        var block;
         try {
             return await this.getLevelDBData(blockHeight);
         } catch (err) {
@@ -147,7 +163,6 @@ class Blockchain {
         });
     }
 
-// validate block
     validateBlockHash(block) {
         // get block hash
         let blockHash = block.hash;
@@ -164,7 +179,6 @@ class Blockchain {
         }
     }
 
-// Validate blockchain
     validateChain() {
         let errorLog = [];
 
@@ -182,7 +196,7 @@ class Blockchain {
                         return console.log('previous block Not found!', err);
                     }
 
-                    if (block.previousBlockHash != JSON.parse(value).hash) {
+                    if (block.previousBlockHash !== JSON.parse(value).hash) {
                         errorLog.push(block.height);
                     }
                 });
@@ -200,52 +214,6 @@ class Blockchain {
     }
 }
 
-
-let bc = new Blockchain();
-
-bc.getBlock(3).then(value => {
-    console.log(value);
-});
-
-bc.getBlockHeight().then(value => {
-    console.log("height:" + value);
-});
-// testBuildBlock();
-// testValidation();
-
-function testBuildBlock() {
-    (function theLoop(i) {
-        setTimeout(function () {
-            bc.addBlock(new Block("test block"));
-            bc.dumpChain();
-            bc.validateChain();
-            if (--i) theLoop(i);
-        }, 500);
-    })(10);
-}
-
-function testValidation() {
-    let inducedErrorBlocks = [2, 4, 7];
-
-    for (var i = 0; i < inducedErrorBlocks.length; i++) {
-        let k = inducedErrorBlocks[i];
-
-        bc.chain.get(k, function (err, value) {
-            if (err) {
-                return console.log('previous block Not found!', err);
-            }
-
-            let block = JSON.parse(value);
-
-            block.body = 'induced chain error';
-            let v = JSON.stringify(block);
-            bc.chain.put(k, v, function (err) {
-                if (err) return console.log('Block ' + k + ' submission failed', err);
-                console.log("key:" + k + ",value:" + v + " added");
-            })
-
-        });
-    }
-
-    bc.validateChain();
-}
+module.exports = {
+    Block, Blockchain
+};
