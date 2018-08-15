@@ -20,10 +20,6 @@ app.get('/block/:blockId', function getBlock(req, res) {
     });
 });
 
-function sleep(ms) {
-    return new Promise(resolve => setTimeout(resolve, ms));
-}
-
 app.post('/block', function addBlock(req, res) {
     console.log(req.body.body);
 
